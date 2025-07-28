@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q3 Engineering OKR Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #333;
+        }
+        
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .okr-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+        
+        .okr-subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid;
+        }
+        
+        .metric-card.critical { border-left-color: #dc3545; }
+        .metric-card.warning { border-left-color: #ffc107; }
+        .metric-card.success { border-left-color: #28a745; }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .project-list {
+            margin-top: 20px;
+        }
+        
+        .project-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        
+        .project-name {
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .project-lead {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+        
+        .project-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-overdue { background: #ffe6e6; color: #dc3545; }
+        .status-due-soon { background: #fff3cd; color: #856404; }
+        .status-on-track { background: #d4edda; color: #155724; }
+        .status-completed { background: #d1ecf1; color: #0c5460; }
+        
+        .timestamp {
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            margin-top: 20px;
+        }
+        
+        .api-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .api-connected { background-color: #28a745; }
+        .api-error { background-color: #dc3545; }
+        
+        @media (max-width: 768px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="okr-title">Q3 Engineering OKR Tracker</div>
+            <div class="okr-subtitle">Deliver ≥95% of roadmap commitments on time</div>
+        </div>
+        
+        <div class="error-message" id="errorMessage">
+            <!-- Error messages will appear here -->
+        </div>
+        
+        <div id="loadingMessage" class="loading">
+            Loading project data from Linear...
+        </div>
+        
+        <div id="dashboardContent" style="display: none;">
+            <div class="metrics-grid">
+                <div class="metric-card critical">
+                    <div class="metric-value" id="onTimeRate">--</div>
+                    <div class="metric-label">On-Time Delivery</div>
+                </div>
+                <div class="metric-card critical">
+                    <div class="metric-value" id="okrScore">--</div>
+                    <div class="metric-label">OKR Score</div>
+                </div>
+                <div class="metric-card critical">
+                    <div class="metric-value" id="overdueCount">--</div>
+                    <div class="metric-label">Overdue Projects</div>
+                </div>
+                <div class="metric-card warning">
+                    <div class="metric-value" id="totalProjects">--</div>
+                    <div class="metric-label">Total Commitments</div>
+                </div>
+            </div>
+            
+            <div class="charts-container">
+                <div class="chart-container">
+                    <div class="chart-title">Project Status Distribution</div>
+                    <canvas id="statusChart" width="400" height="300"></canvas>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-title">OKR Progress vs Target</div>
+                    <canvas id="progressChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Critical Projects Requiring Attention</div>
+                <div class="project-list" id="projectList">
+                    <!-- Projects will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="timestamp" id="lastUpdate">
+            <span class="api-status" id="apiStatus"></span>
+            <span id="updateText">Connecting to Linear API...</span>
+        </div>
+    </div>
+
+    <script>
+        // Configuration - Replace these with your actual values
+        const CONFIG = {
+            LINEAR_API_TOKEN: 'lin_api_B8YmUcyqrPs8qEk873rD3MIhHG1iGp218DhsRvqa', // Replace with your Linear API token
+            LINEAR_API_URL: 'https://api.linear.app/graphql',
+            TEAM_FILTER: 'engineering', // Filter for engineering team
+            Q3_START_DATE: '2025-07-01',
+            Q3_END_DATE: '2025-09-30',
+            UPDATE_INTERVAL: 300000, // 5 minutes in milliseconds
+            GRACE_PERIOD_DAYS: 0
+        };
+
+        // Global variables
+        let statusChart, progressChart;
+        let projectData = {
+            total: 0,
+            onTime: 0,
+            overdue: 0,
+            inProgress: 0,
+            completed: 0,
+            onTimeRate: 0,
+            okrScore: 0,
+            projects: []
+        };
+
+        // Linear API GraphQL queries
+        const PROJECTS_QUERY = `
+            query GetProjects($after: String) {
+                projects(
+                    first: 100
+                    after: $after
+                    filter: {
+                        startDate: { gte: "${CONFIG.Q3_START_DATE}" }
+                        targetDate: { lte: "${CONFIG.Q3_END_DATE}" }
+                    }
+                ) {
+                    nodes {
+                        id
+                        name
+                        description
+                        startDate
+                        targetDate
+                        completedAt
+                        progress
+                        state {
+                            name
+                            type
+                        }
+                        lead {
+                            name
+                            email
+                        }
+                        teams {
+                            nodes {
+                                name
+                                key
+                            }
+                        }
+                    }
+                    pageInfo {
+                        hasNextPage
+                        endCursor
+                    }
+                }
+            }
+        `;
+
+        // Utility functions
+        function calculateDaysDifference(date1, date2) {
+            const diffTime = Math.abs(new Date(date2) - new Date(date1));
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        function isQ3Project(project) {
+            if (!project.targetDate) return false;
+            const targetDate = new Date(project.targetDate);
+            const q3Start = new Date(CONFIG.Q3_START_DATE);
+            const q3End = new Date(CONFIG.Q3_END_DATE);
+            return targetDate >= q3Start && targetDate <= q3End;
+        }
+
+        function isEngineeringProject(project) {
+            return project.teams.nodes.some(team => 
+                team.name.toLowerCase().includes('engineering') || 
+                team.key.toLowerCase().includes('eng')
+            );
+        }
+
+        function calculateProjectStatus(project) {
+            const currentDate = new Date();
+            const targetDate = new Date(project.targetDate);
+            const gracePeriodEnd = new Date(targetDate);
+            gracePeriodEnd.setDate(gracePeriodEnd.getDate() + CONFIG.GRACE_PERIOD_DAYS);
+
+            if (project.completedAt) {
+                const completedDate = new Date(project.completedAt);
+                return {
+                    status: completedDate <= gracePeriodEnd ? 'completed-ontime' : 'completed-late',
+                    daysVariance: calculateDaysDifference(targetDate, completedDate),
+                    isCompleted: true
+                };
+            }
+
+            if (currentDate > gracePeriodEnd) {
+                return {
+                    status: 'overdue',
+                    daysOverdue: calculateDaysDifference(targetDate, currentDate),
+                    isCompleted: false
+                };
+            }
+
+            if (currentDate > targetDate) {
+                return {
+                    status: 'in-grace-period',
+                    daysInGrace: calculateDaysDifference(targetDate, currentDate),
+                    isCompleted: false
+                };
+            }
+
+            const daysRemaining = calculateDaysDifference(currentDate, targetDate);
+            if (daysRemaining <= 3) {
+                return {
+                    status: 'due-soon',
+                    daysRemaining,
+                    isCompleted: false
+                };
+            }
+
+            return {
+                status: 'in-progress',
+                daysRemaining,
+                isCompleted: false
+            };
+        }
+
+        // API functions
+        async function fetchLinearData() {
+            try {
+                showApiStatus('connecting');
+                
+                const response = await fetch(CONFIG.LINEAR_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${CONFIG.LINEAR_API_TOKEN}`
+                    },
+                    body: JSON.stringify({
+                        query: PROJECTS_QUERY
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.errors) {
+                    throw new Error(`GraphQL errors: ${data.errors.map(e => e.message).join(', ')}`);
+                }
+
+                return data.data.projects.nodes;
+            } catch (error) {
+                console.error('Error fetching Linear data:', error);
+                showError(`Failed to fetch data from Linear API: ${error.message}`);
+                showApiStatus('error');
+                throw error;
+            }
+        }
+
+        function processProjectData(rawProjects) {
+            // Filter for Q3 engineering projects
+            const q3EngineeringProjects = rawProjects.filter(project => 
+                isQ3Project(project) && isEngineeringProject(project)
+            );
+
+            // Process each project
+            const processedProjects = q3EngineeringProjects.map(project => ({
+                id: project.id,
+                name: project.name,
+                lead: project.lead?.name || 'Unassigned',
+                leadEmail: project.lead?.email,
+                startDate: project.startDate,
+                targetDate: project.targetDate,
+                completedAt: project.completedAt,
+                progress: project.progress,
+                state: project.state?.name,
+                ...calculateProjectStatus(project)
+            }));
+
+            // Calculate metrics
+            const total = processedProjects.length;
+            const completed = processedProjects.filter(p => p.isCompleted).length;
+            const onTime = processedProjects.filter(p => p.status === 'completed-ontime').length;
+            const overdue = processedProjects.filter(p => p.status === 'overdue').length;
+            const inProgress = processedProjects.filter(p => !p.isCompleted).length;
+            
+            const onTimeRate = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 0;
+            const okrScore = Math.round((onTimeRate / 95) * 100) / 100;
+
+            return {
+                total,
+                onTime,
+                overdue,
+                inProgress,
+                completed,
+                onTimeRate,
+                okrScore: Math.max(0, Math.min(1, okrScore)),
+                projects: processedProjects
+            };
+        }
+
+        // UI functions
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function showApiStatus(status) {
+            const statusElement = document.getElementById('apiStatus');
+            statusElement.className = `api-status api-${status === 'connected' ? 'connected' : 'error'}`;
+        }
+
+        function showLoading(show = true) {
+            document.getElementById('loadingMessage').style.display = show ? 'block' : 'none';
+            document.getElementById('dashboardContent').style.display = show ? 'none' : 'block';
+        }
+
+        function initializeCharts() {
+            // Status Distribution Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            statusChart = new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['On Time', 'Overdue', 'In Progress'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Progress Chart
+            const progressCtx = document.getElementById('progressChart').getContext('2d');
+            progressChart = new Chart(progressCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Current', 'Target'],
+                    datasets: [{
+                        label: 'On-Time Delivery %',
+                        data: [0, 95],
+                        backgroundColor: ['#dc3545', '#28a745'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (!statusChart || !progressChart) return;
+
+            // Update status chart
+            statusChart.data.datasets[0].data = [
+                projectData.onTime, 
+                projectData.overdue, 
+                projectData.inProgress
+            ];
+            statusChart.update();
+
+            // Update progress chart
+            const currentColor = projectData.onTimeRate >= 95 ? '#28a745' : 
+                                projectData.onTimeRate >= 80 ? '#ffc107' : '#dc3545';
+            progressChart.data.datasets[0].backgroundColor = [currentColor, '#28a745'];
+            progressChart.data.datasets[0].data = [projectData.onTimeRate, 95];
+            progressChart.update();
+        }
+
+        function updateMetrics() {
+            document.getElementById('onTimeRate').textContent = projectData.onTimeRate + '%';
+            document.getElementById('okrScore').textContent = projectData.okrScore.toFixed(2);
+            document.getElementById('overdueCount').textContent = projectData.overdue;
+            document.getElementById('totalProjects').textContent = projectData.total;
+
+            // Update metric card colors based on performance
+            const cards = document.querySelectorAll('.metric-card');
+            cards.forEach(card => {
+                card.className = 'metric-card ' + (
+                    projectData.onTimeRate >= 95 ? 'success' :
+                    projectData.onTimeRate >= 80 ? 'warning' : 'critical'
+                );
+            });
+        }
+
+        function updateProjectList() {
+            const projectList = document.getElementById('projectList');
+            
+            // Get critical projects (overdue and due soon)
+            const criticalProjects = projectData.projects
+                .filter(p => ['overdue', 'due-soon', 'in-grace-period'].includes(p.status))
+                .sort((a, b) => {
+                    // Sort by priority: overdue first, then by days
+                    if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+                    if (b.status === 'overdue' && a.status !== 'overdue') return 1;
+                    return (b.daysOverdue || 0) - (a.daysOverdue || 0);
+                });
+
+            if (criticalProjects.length === 0) {
+                projectList.innerHTML = '<div class="project-item">No critical projects at this time</div>';
+                return;
+            }
+
+            projectList.innerHTML = criticalProjects.map(project => {
+                let statusText, statusClass;
+                
+                switch (project.status) {
+                    case 'overdue':
+                        statusText = `${project.daysOverdue} days overdue`;
+                        statusClass = 'status-overdue';
+                        break;
+                    case 'due-soon':
+                        statusText = `Due in ${project.daysRemaining} days`;
+                        statusClass = 'status-due-soon';
+                        break;
+                    case 'in-grace-period':
+                        statusText = `${project.daysInGrace} days in grace period`;
+                        statusClass = 'status-due-soon';
+                        break;
+                    default:
+                        statusText = `${project.daysRemaining} days remaining`;
+                        statusClass = 'status-on-track';
+                }
+
+                return `
+                    <div class="project-item">
+                        <div>
+                            <div class="project-name">${project.name}</div>
+                            <div class="project-lead">Lead: ${project.lead}</div>
+                        </div>
+                        <div class="project-status ${statusClass}">${statusText}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const timestamp = now.toLocaleString('en-US', {
+                timeZone: 'America/Los_Angeles',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            document.getElementById('updateText').textContent = `Last updated: ${timestamp} PDT`;
+        }
+
+        // Main update function
+        async function updateDashboard() {
+            try {
+                hideError();
+                const rawProjects = await fetchLinearData();
+                projectData = processProjectData(rawProjects);
+                
+                showApiStatus('connected');
+                showLoading(false);
+                
+                updateMetrics();
+                updateCharts();
+                updateProjectList();
+                updateTimestamp();
+                
+                console.log('Dashboard updated successfully', projectData);
+            } catch (error) {
+                console.error('Failed to update dashboard:', error);
+                showApiStatus('error');
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check if API token is configured
+            if (CONFIG.LINEAR_API_TOKEN === 'YOUR_LINEAR_API_TOKEN_HERE') {
+                showError('Please configure your Linear API token in the CONFIG section');
+                showApiStatus('error');
+                return;
+            }
+
+            initializeCharts();
+            
+            // Initial load
+            await updateDashboard();
+            
+            // Set up periodic updates
+            setInterval(updateDashboard, CONFIG.UPDATE_INTERVAL);
+            
+            // Update timestamp every minute
+            setInterval(updateTimestamp, 60000);
+        });
+
+        // Add error handling for unhandled promises
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('An unexpected error occurred. Check the console for details.');
+            showApiStatus('error');
+        });
+    </script>
+</body>
+</html>
